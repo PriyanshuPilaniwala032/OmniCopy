@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-from typing import Annotated, Generic, TypeVar
-from fastapi import Depends, FastAPI, HTTPException
+from typing import Annotated, Generic, Optional, TypeVar
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.concurrency import asynccontextmanager
 from pydantic import BaseModel
 from sqlmodel import Field, SQLModel, Session, create_engine, select
@@ -45,19 +45,47 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(root_path="/api/v1", lifespan=lifespan)
 
-T = TypeVar("T")
-class Response(BaseModel, Generic[T]):
-    data: T
-
 @app.get("/")
 async def root():
     return {"message" : "Hello World"}
 
+T = TypeVar("T")
+class Response(BaseModel, Generic[T]):
+    data: T
 
-@app.get("/campaigns", response_model=Response[list[Campaign]])
-async def read_campaigns(session: SessionDep):
-    data = session.exec(select(Campaign)).all()
-    return {"data" : data}
+class PaginatedResponse(BaseModel, Generic[T]):
+    next: Optional[str]
+    prev: Optional[str]
+    data: T
+
+@app.get("/campaigns", response_model=PaginatedResponse[list[Campaign]])
+async def read_campaigns(request: Request, session: SessionDep, offset: int = Query(0, ge=0), limit: int = Query(20, ge=1)):
+    data = list(session.exec(select(Campaign) 
+                        .order_by(Campaign.campaign_id)                      # type: ignore
+                        .offset(offset).limit(limit)).all())
+
+    base_url = str(request.url).split('?')[0]
+
+    # total = session.exec(select(func.count()).select_from(Campaign)).one()
+
+    # if offset + limit < total:
+    #     next_url = f"{base_url}?page={page+1}&page_size={limit}"
+    # else:
+    #     next_url = None
+
+    next_url = f"{base_url}?offset={offset+limit}&limit={limit}"
+
+    if offset > 0:
+        prev_url = f"{base_url}?offset={max(0, offset - limit)}&limit={limit}"
+    else:
+        prev_url = None
+
+    return PaginatedResponse[list[Campaign]
+    ](
+        next=next_url,
+        prev=prev_url,
+        data=data
+    )
 
 
 @app.get("/campaigns/{id}", response_model=Response[Campaign])

@@ -1,7 +1,7 @@
 from datetime import datetime
 from random import randint
 from typing import Any
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Response
 
 app = FastAPI(root_path="/api/v1")
 
@@ -29,14 +29,13 @@ async def read_campaigns():
 
 @app.get("/campaigns/{id}")
 async def read_campaign(id: int):
-
     for campaign in data:
         if campaign.get("campaign_id") == id:
             return {"campaign" : campaign}
 
     raise HTTPException(status_code=404)
 
-@app.post("/campaigns")
+@app.post("/campaigns", status_code=201)
 async def create_campaign(body: dict[str, Any]):
     # body = await request.json()
     new: Any = {
@@ -48,3 +47,27 @@ async def create_campaign(body: dict[str, Any]):
 
     data.append(new)
     return {"campaign": new} 
+
+@app.put("/campaign/{id}")
+async def update_campaign(id: int, body: dict[str, Any]):
+    for index, campaign in enumerate(data):
+        if campaign.get("campaign_id") == id:
+             updated: Any = {
+                     "campaign_id" : id,
+                     "name" : body.get("name"),
+                     "due_date" : body.get("due_date"),
+                     "timestamp" : campaign.get("timestamp")
+                 }
+             data[index] = updated
+             return {"campaign" : updated}
+
+    raise HTTPException(status_code=404)    
+
+@app.delete("/campaign/{id}")
+async def delete_campaign(id: int):
+    for index, campaign in enumerate(data):
+        if campaign.get("campaign_id") == id:
+            data.pop(index)
+            return Response(status_code=204)
+
+    raise HTTPException(status_code=404)
